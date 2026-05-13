@@ -64,71 +64,78 @@ _ZSH_COMPLETION = '''\
 #compdef kbdx-ops
 
 _kbdx_ops() {
-    local -a args
-    local line state
+    local curcontext="$curcontext" state line
+    typeset -A opt_args
 
-    args=(
-        '--version[Show version]'
-        '--help[Show help]'
-        'merge:Merge entries from src into dest'
-        'diff:Show differences between two databases'
-        'dedup:Find and remove duplicates within a database'
-        'completions:Generate shell completion scripts'
-    )
+    _arguments -C \\
+        '--version[Show version]' \\
+        '--help[Show help]' \\
+        '1: :->cmds' \\
+        '*: :->args' && return
 
-    _arguments -A "*" "$args[@]" && return
-
-    case "$words[1]" in
-        merge)
-            _arguments -A "*" \\
-                '--apply[Actually save changes]' \\
-                '--similar[Detect similar entries]' \\
-                '--similarity-threshold=[Similarity threshold (0-1)]' \\
-                '--interactive[Review one by one]' \\
-                '-i[Review one by one]' \\
-                '--no-pager[Print without pager]' \\
-                '--auto-skip-similar[Skip all similars]' \\
-                '--min-score=[Min score filter]' \\
-                '--max-score=[Max score filter]' \\
-                '--dest-password=[Dest DB password]' \\
-                '--src-password=[Source DB password]' \\
-                '--dest-keyfile=[Dest key file]:file:_files' \\
-                '--src-keyfile=[Source key file]:file:_files' \\
-                '*:kdbx file:_files -g "*.kdbx"'
+    case $state in
+        cmds)
+            _describe 'command' '(
+                "merge:Merge entries from src into dest"
+                "diff:Show differences between two databases"
+                "dedup:Find and remove duplicates within a database"
+                "completions:Generate shell completion scripts"
+            )'
             ;;
-        diff)
-            _arguments -A "*" \\
-                '-o[Output file]:file:_files' \\
-                '--output=[Output file]:file:_files' \\
-                '--apply[Actually create output]' \\
-                '--similarity-threshold=[Threshold (0-1)]' \\
-                '--no-pager[Print without pager]' \\
-                '--min-score=[Min score filter]' \\
-                '--max-score=[Max score filter]' \\
-                '--password-a=[Password for A]' \\
-                '--password-b=[Password for B]' \\
-                '--output-password=[Output password]' \\
-                '--keyfile-a=[Keyfile for A]:file:_files' \\
-                '--keyfile-b=[Keyfile for B]:file:_files' \\
-                '--output-keyfile=[Output keyfile]:file:_files' \\
-                '*:kdbx file:_files -g "*.kdbx"'
-            ;;
-        dedup)
-            _arguments -A "*" \\
-                '--apply[Actually remove duplicates]' \\
-                '--interactive[Review groups one by one]' \\
-                '-i[Review groups one by one]' \\
-                '--similarity-threshold=[Threshold (0-1)]' \\
-                '--min-score=[Min score filter]' \\
-                '--max-score=[Max score filter]' \\
-                '--no-pager[Print without pager]' \\
-                '--keep=[Keep strategy]:(first most-complete)' \\
-                '--password=[Database password]' \\
-                '--keyfile=[Key file]:file:_files' \\
-                '*:kdbx file:_files -g "*.kdbx"'
-            ;;
-        completions)
-            _arguments '1:shell:(bash zsh)'
+        args)
+            case $words[1] in
+                merge)
+                    _arguments \\
+                        '--apply[Actually save changes]' \\
+                        '--similar[Detect similar entries]' \\
+                        '--similarity-threshold=[Similarity threshold (0-1)]' \\
+                        '--interactive[Review one by one]' \\
+                        '-i[Review one by one]' \\
+                        '--no-pager[Print without pager]' \\
+                        '--auto-skip-similar[Skip all similars]' \\
+                        '--min-score=[Min score filter]' \\
+                        '--max-score=[Max score filter]' \\
+                        '--dest-password=[Dest DB password]' \\
+                        '--src-password=[Source DB password]' \\
+                        '--dest-keyfile=[Dest key file]:file:_files' \\
+                        '--src-keyfile=[Source key file]:file:_files' \\
+                        '*:kdbx file:_files -g "*.kdbx"'
+                    ;;
+                diff)
+                    _arguments \\
+                        '-o[Output file]:file:_files' \\
+                        '--output=[Output file]:file:_files' \\
+                        '--apply[Actually create output]' \\
+                        '--similarity-threshold=[Threshold (0-1)]' \\
+                        '--no-pager[Print without pager]' \\
+                        '--min-score=[Min score filter]' \\
+                        '--max-score=[Max score filter]' \\
+                        '--password-a=[Password for A]' \\
+                        '--password-b=[Password for B]' \\
+                        '--output-password=[Output password]' \\
+                        '--keyfile-a=[Keyfile for A]:file:_files' \\
+                        '--keyfile-b=[Keyfile for B]:file:_files' \\
+                        '--output-keyfile=[Output keyfile]:file:_files' \\
+                        '*:kdbx file:_files -g "*.kdbx"'
+                    ;;
+                dedup)
+                    _arguments \\
+                        '--apply[Actually remove duplicates]' \\
+                        '--interactive[Review groups one by one]' \\
+                        '-i[Review groups one by one]' \\
+                        '--similarity-threshold=[Threshold (0-1)]' \\
+                        '--min-score=[Min score filter]' \\
+                        '--max-score=[Max score filter]' \\
+                        '--no-pager[Print without pager]' \\
+                        '--keep=[Keep strategy]:(first most-complete)' \\
+                        '--password=[Database password]' \\
+                        '--keyfile=[Key file]:file:_files' \\
+                        '*:kdbx file:_files -g "*.kdbx"'
+                    ;;
+                completions)
+                    _arguments '1:shell:(bash zsh)'
+                    ;;
+            esac
             ;;
     esac
 } &&
@@ -1294,6 +1301,22 @@ def validate_common(args) -> None:
             print("ERROR: --min-score não pode ser maior que --max-score.", file=sys.stderr)
             sys.exit(1)
 
+def _find_zsh_completion_dir(user_home: str) -> str:
+    """Find a writable directory for zsh completions, checking common fpath locations."""
+    # 1. Check ~/.zfunc/ (commonly added to fpath by users)
+    zfunc_dir = os.path.join(user_home, ".zfunc")
+    if os.path.isdir(zfunc_dir) and os.access(zfunc_dir, os.W_OK):
+        return zfunc_dir
+    # 2. Check ~/.local/share/zsh/site-functions/ (XDG)
+    local_zsh = os.path.join(user_home, ".local", "share", "zsh", "site-functions")
+    os.makedirs(local_zsh, exist_ok=True)
+    if os.access(local_zsh, os.W_OK):
+        return local_zsh
+    # 3. Fallback: create ~/.zfunc/
+    os.makedirs(zfunc_dir, exist_ok=True)
+    return zfunc_dir
+
+
 def cmd_completions(args: argparse.Namespace) -> None:
     """Detect binary location and install shell completions."""
     import shutil
@@ -1320,7 +1343,7 @@ def cmd_completions(args: argparse.Namespace) -> None:
             dest_dir = os.path.join(user_home, ".local", "share", "bash-completion", "completions")
             dest_file = os.path.join(dest_dir, "kbdx-ops")
         else:
-            dest_dir = os.path.join(user_home, ".local", "share", "zsh", "site-functions")
+            dest_dir = _find_zsh_completion_dir(user_home)
             dest_file = os.path.join(dest_dir, "_kbdx-ops")
         install_type = "local"
     elif bin_dir.startswith("/usr") or bin_dir.startswith("/opt"):
@@ -1338,7 +1361,7 @@ def cmd_completions(args: argparse.Namespace) -> None:
             dest_dir = os.path.join(user_home, ".local", "share", "bash-completion", "completions")
             dest_file = os.path.join(dest_dir, "kbdx-ops")
         else:
-            dest_dir = os.path.join(user_home, ".local", "share", "zsh", "site-functions")
+            dest_dir = _find_zsh_completion_dir(user_home)
             dest_file = os.path.join(dest_dir, "_kbdx-ops")
         install_type = "local (fallback)"
 
