@@ -80,51 +80,51 @@ _kbdx_ops() {
 
     case "$words[1]" in
         merge)
-            _arguments -A "*" \
-                '--apply[Actually save changes]' \
-                '--similar[Detect similar entries]' \
-                '--similarity-threshold=[Similarity threshold (0-1)]' \
-                '--interactive[Review one by one]' \
-                '-i[Review one by one]' \
-                '--no-pager[Print without pager]' \
-                '--auto-skip-similar[Skip all similars]' \
-                '--min-score=[Min score filter]' \
-                '--max-score=[Max score filter]' \
-                '--dest-password=[Dest DB password]' \
-                '--src-password=[Source DB password]' \
-                '--dest-keyfile=[Dest key file]:file:_files' \
-                '--src-keyfile=[Source key file]:file:_files' \
+            _arguments -A "*" \\
+                '--apply[Actually save changes]' \\
+                '--similar[Detect similar entries]' \\
+                '--similarity-threshold=[Similarity threshold (0-1)]' \\
+                '--interactive[Review one by one]' \\
+                '-i[Review one by one]' \\
+                '--no-pager[Print without pager]' \\
+                '--auto-skip-similar[Skip all similars]' \\
+                '--min-score=[Min score filter]' \\
+                '--max-score=[Max score filter]' \\
+                '--dest-password=[Dest DB password]' \\
+                '--src-password=[Source DB password]' \\
+                '--dest-keyfile=[Dest key file]:file:_files' \\
+                '--src-keyfile=[Source key file]:file:_files' \\
                 '*:kdbx file:_files -g "*.kdbx"'
             ;;
         diff)
-            _arguments -A "*" \
-                '-o[Output file]:file:_files' \
-                '--output=[Output file]:file:_files' \
-                '--apply[Actually create output]' \
-                '--similarity-threshold=[Threshold (0-1)]' \
-                '--no-pager[Print without pager]' \
-                '--min-score=[Min score filter]' \
-                '--max-score=[Max score filter]' \
-                '--password-a=[Password for A]' \
-                '--password-b=[Password for B]' \
-                '--output-password=[Output password]' \
-                '--keyfile-a=[Keyfile for A]:file:_files' \
-                '--keyfile-b=[Keyfile for B]:file:_files' \
-                '--output-keyfile=[Output keyfile]:file:_files' \
+            _arguments -A "*" \\
+                '-o[Output file]:file:_files' \\
+                '--output=[Output file]:file:_files' \\
+                '--apply[Actually create output]' \\
+                '--similarity-threshold=[Threshold (0-1)]' \\
+                '--no-pager[Print without pager]' \\
+                '--min-score=[Min score filter]' \\
+                '--max-score=[Max score filter]' \\
+                '--password-a=[Password for A]' \\
+                '--password-b=[Password for B]' \\
+                '--output-password=[Output password]' \\
+                '--keyfile-a=[Keyfile for A]:file:_files' \\
+                '--keyfile-b=[Keyfile for B]:file:_files' \\
+                '--output-keyfile=[Output keyfile]:file:_files' \\
                 '*:kdbx file:_files -g "*.kdbx"'
             ;;
         dedup)
-            _arguments -A "*" \
-                '--apply[Actually remove duplicates]' \
-                '--interactive[Review groups one by one]' \
-                '-i[Review groups one by one]' \
-                '--similarity-threshold=[Threshold (0-1)]' \
-                '--min-score=[Min score filter]' \
-                '--max-score=[Max score filter]' \
-                '--no-pager[Print without pager]' \
-                '--keep=[Keep strategy]:(first most-complete)' \
-                '--password=[Database password]' \
-                '--keyfile=[Key file]:file:_files' \
+            _arguments -A "*" \\
+                '--apply[Actually remove duplicates]' \\
+                '--interactive[Review groups one by one]' \\
+                '-i[Review groups one by one]' \\
+                '--similarity-threshold=[Threshold (0-1)]' \\
+                '--min-score=[Min score filter]' \\
+                '--max-score=[Max score filter]' \\
+                '--no-pager[Print without pager]' \\
+                '--keep=[Keep strategy]:(first most-complete)' \\
+                '--password=[Database password]' \\
+                '--keyfile=[Key file]:file:_files' \\
                 '*:kdbx file:_files -g "*.kdbx"'
             ;;
         completions)
@@ -134,6 +134,7 @@ _kbdx_ops() {
 } &&
 compdef _kbdx_ops kbdx-ops
 '''
+
 import argparse
 import sys
 import os
@@ -153,14 +154,12 @@ except ImportError:
     print("ERROR: pykeepass is required. Install with: pip install pykeepass", file=sys.stderr)
     sys.exit(1)
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Terminal raw mode management
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _TERMIOS_SAVED = None
 _TERMIOS_FD = None
-
 
 def _save_terminal_state():
     global _TERMIOS_SAVED, _TERMIOS_FD
@@ -173,7 +172,6 @@ def _save_terminal_state():
     except Exception:
         pass
 
-
 def _restore_terminal():
     if _TERMIOS_SAVED is None or _TERMIOS_FD is None:
         return
@@ -183,28 +181,22 @@ def _restore_terminal():
     except Exception:
         pass
 
-
 _save_terminal_state()
 atexit.register(_restore_terminal)
-
 
 def _sigtstp_handler(signum, frame):
     _restore_terminal()
     signal.signal(signal.SIGTSTP, signal.SIG_DFL)
     os.kill(os.getpid(), signal.SIGTSTP)
 
-
 signal.signal(signal.SIGTSTP, _sigtstp_handler)
-
 
 def _sigint_handler(signum, frame):
     _restore_terminal()
     print("\n\n  Operação cancelada pelo usuário (Ctrl+C).")
     sys.exit(130)
 
-
 signal.signal(signal.SIGINT, _sigint_handler)
-
 
 @contextmanager
 def raw_terminal():
@@ -224,7 +216,6 @@ def raw_terminal():
         except Exception:
             pass
 
-
 def getch() -> str:
     if not sys.stdin.isatty():
         try:
@@ -236,7 +227,6 @@ def getch() -> str:
     if not ch:
         return ""
     return ch.lower()
-
 
 def prompt_key(options: dict) -> str:
     labels = "  [ " + "  |  ".join(f"{k}={v}" for k, v in options.items()) + "  ]"
@@ -253,13 +243,11 @@ def prompt_key(options: dict) -> str:
         display = ch if ch.isprintable() else f"0x{ord(ch):02x}"
         print(f"\r  Tecla inválida: '{display}'  ", end="", flush=True)
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Assinatura / comparação de entradas
 # ═══════════════════════════════════════════════════════════════════════════════
 
 SENSITIVE_FIELDS = {"password"}
-
 
 def entry_signature(entry) -> dict:
     sig = {
@@ -277,7 +265,6 @@ def entry_signature(entry) -> dict:
     sig["custom"] = custom
     return sig
 
-
 def is_exact_duplicate(src_sig: dict, dest_sig: dict) -> bool:
     for field in ("title", "username", "password", "url", "notes"):
         src_val = src_sig[field]
@@ -293,14 +280,12 @@ def is_exact_duplicate(src_sig: dict, dest_sig: dict) -> bool:
                 return False
     return True
 
-
 def fuzzy_match(a: str, b: str) -> float:
     if not a and not b:
         return 1.0
     if not a or not b:
         return 0.0
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
 
 def compute_field_scores(src_sig: dict, dest_sig: dict) -> dict:
     scores = {}
@@ -321,7 +306,6 @@ def compute_field_scores(src_sig: dict, dest_sig: dict) -> dict:
     scores["custom"] = (custom_score, src_custom, dest_custom)
     return scores
 
-
 def compute_overall_similarity(field_scores: dict) -> float:
     weights = {
         "title": 4, "username": 3, "url": 2,
@@ -338,7 +322,6 @@ def compute_overall_similarity(field_scores: dict) -> float:
     if total_weight == 0:
         return 0.0
     return weighted_sum / total_weight
-
 
 def find_best_match(src_sig: dict, dest_entries: list, dest_sigs: list,
                     threshold: float = 0.5) -> tuple:
@@ -362,7 +345,6 @@ def find_best_match(src_sig: dict, dest_entries: list, dest_sigs: list,
                 best_sim, best_field_scores)
     return (None, None, 0.0, None)
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Formatação
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -376,7 +358,6 @@ FIELD_ICONS = {
     "url": "🔗", "notes": "📝", "custom": "🏷️",
 }
 
-
 def format_value(val, field: str, width: int = 42) -> str:
     if field in SENSITIVE_FIELDS:
         return "•••••••• (oculto)" if val else "(vazio)"
@@ -385,7 +366,6 @@ def format_value(val, field: str, width: int = 42) -> str:
     if len(val) > width:
         val = val[: width - 3] + "..."
     return val
-
 
 def format_custom_short(custom_dict: dict, max_items: int = 5) -> str:
     if not custom_dict:
@@ -397,11 +377,9 @@ def format_custom_short(custom_dict: dict, max_items: int = 5) -> str:
         items.append(f"...(+{len(custom_dict) - max_items})")
     return ", ".join(items)
 
-
 def score_bar(score: float, width: int = 10) -> str:
     filled = round(score * width)
     return "█" * filled + "░" * (width - filled)
-
 
 def format_single_entry_detail(field_scores: dict, overall: float,
                                 group_path: str, idx: int = 0,
@@ -435,7 +413,6 @@ def format_single_entry_detail(field_scores: dict, overall: float,
     lines.append("")
     return "\n".join(lines)
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Grupos
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -449,7 +426,6 @@ def get_entry_group_path(entry) -> str:
     parts.reverse()
     return "/".join(parts)
 
-
 def resolve_or_create_group(kp, group_path: str):
     if not group_path:
         return kp.root_group
@@ -461,7 +437,6 @@ def resolve_or_create_group(kp, group_path: str):
             child = kp.add_group(current, part)
         current = child
     return current
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Utilitários de banco
@@ -477,7 +452,6 @@ def open_db(path: Path, label: str, password: str = None, keyfile: Path = None):
     except CredentialsError:
         print(f"ERROR: Wrong password or key file for {path.name}.", file=sys.stderr)
         sys.exit(1)
-
 
 def copy_entry(src_entry, dest_kp, group_path: str):
     """Copy a pykeepass entry from src to dest_kp. Returns the new entry."""
@@ -495,7 +469,6 @@ def copy_entry(src_entry, dest_kp, group_path: str):
         if val is not None:
             new_entry.set_custom_property(key, val)
     return new_entry
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Pager
@@ -518,7 +491,6 @@ def display_via_pager(text: str, no_pager: bool = False) -> None:
         p.communicate(input=text)
     except OSError:
         print(text)
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Parser de argumentos
@@ -639,7 +611,6 @@ Examples:
                     help="Critério para manter qual entrada (padrão: most-complete)")
 
     return p
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  COMANDO: MERGE
@@ -819,7 +790,6 @@ def cmd_merge(args: argparse.Namespace) -> None:
     else:
         print("  Nada a fazer.")
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  COMANDO: DIFF
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -989,7 +959,6 @@ def cmd_diff(args: argparse.Namespace) -> None:
         out_kp.save()
         print(f"  ✅ Arquivo criado: {args.output.resolve()} ({count} entradas)")
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  COMANDO: DEDUP
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1003,7 +972,6 @@ def _entry_completeness(sig: dict) -> int:
     if sig["custom"]:
         score += len(sig["custom"])
     return score
-
 
 def _group_duplicates(entries, sigs, threshold: float) -> list:
     """Group entries into duplicate groups based on similarity.
@@ -1031,7 +999,6 @@ def _group_duplicates(entries, sigs, threshold: float) -> list:
             groups.append(group)
 
     return groups
-
 
 def cmd_dedup(args: argparse.Namespace) -> None:
     """Find and remove duplicate entries within a database."""
@@ -1308,7 +1275,6 @@ def cmd_dedup(args: argparse.Namespace) -> None:
     else:
         print("  Nada a fazer.")
 
-
 def validate_common(args) -> None:
     """Validate shared argument constraints."""
     if hasattr(args, 'similarity_threshold'):
@@ -1327,7 +1293,6 @@ def validate_common(args) -> None:
         if args.min_score > args.max_score:
             print("ERROR: --min-score não pode ser maior que --max-score.", file=sys.stderr)
             sys.exit(1)
-
 
 def cmd_completions(args: argparse.Namespace) -> None:
     """Detect binary location and install shell completions."""
@@ -1399,7 +1364,6 @@ def cmd_completions(args: argparse.Namespace) -> None:
         print('    autoload -Uz compinit && compinit')
         print(f"  Ou reinicie o terminal.")
 
-
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -1451,7 +1415,6 @@ def main():
             print(f"ERROR: Banco não encontrado: {args.database}", file=sys.stderr)
             sys.exit(1)
         cmd_dedup(args)
-
 
 if __name__ == "__main__":
     main()
