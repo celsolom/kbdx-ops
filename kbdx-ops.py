@@ -18,41 +18,44 @@ _BASH_COMPLETION = '''\
 
 _kbdx_ops_completions() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local prev="${COMP_WORDS[COMP_CWORD-1]}"
-    local cword=${#COMP_WORDS[@]}
-    local first="${COMP_WORDS[1]}"
+    local cword=$COMP_CWORD
+    local subcmd="${COMP_WORDS[1]}"
 
     local commands="merge diff completions dedup"
     local merge_opts="--apply --similar --similarity-threshold --interactive -i --no-pager --auto-skip-similar --min-score --max-score --dest-password --src-password --dest-keyfile --src-keyfile"
     local diff_opts="-o --output --apply --similarity-threshold --no-pager --min-score --max-score --password-a --password-b --output-password --keyfile-a --keyfile-b --output-keyfile"
     local dedup_opts="--apply --interactive -i --similarity-threshold --min-score --max-score --no-pager --keep --password --keyfile"
 
-    case "$first" in
-        merge)
+    # Top-level: subcommands
+    if [[ -z "$subcmd" || $cword -eq 0 ]]; then
+        COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+        return
+    fi
+
+    case "$subcmd" in
+        merge|diff)
+            # merge/diff: positions 2,3 (0-indexed: cword=2,3) are .kdbx files + flags
+            COMPREPLY=()
             if [[ $cword -eq 2 || $cword -eq 3 ]]; then
-                COMPREPLY=($(compgen -f -X '!*.kdbx' -- "$cur"))
-            else
-                COMPREPLY=($(compgen -W "$merge_opts" -- "$cur"))
+                COMPREPLY+=($(compgen -f -X '!*.kdbx' -- "$cur"))
             fi
+            local opts="$merge_opts"
+            [[ "$subcmd" == "diff" ]] && opts="$diff_opts"
+            COMPREPLY+=($(compgen -W "$opts" -- "$cur"))
             ;;
-        diff)
-            if [[ $cword -eq 2 || $cword -eq 3 ]]; then
-                COMPREPLY=($(compgen -f -X '!*.kdbx' -- "$cur"))
-            else
-                COMPREPLY=($(compgen -W "$diff_opts" -- "$cur"))
+        dedup)
+            # dedup: position 2 (cword=2) is .kdbx file + flags
+            COMPREPLY=()
+            if [[ $cword -eq 2 ]]; then
+                COMPREPLY+=($(compgen -f -X '!*.kdbx' -- "$cur"))
             fi
+            COMPREPLY+=($(compgen -W "$dedup_opts" -- "$cur"))
             ;;
         completions)
             COMPREPLY=($(compgen -W "bash zsh" -- "$cur"))
             ;;
-        dedup)
-            if [[ $cword -eq 2 ]]; then
-                COMPREPLY=($(compgen -f -X '!*.kdbx' -- "$cur"))
-            else
-                COMPREPLY=($(compgen -W "$dedup_opts" -- "$cur"))
-            fi
-            ;;
         *)
+            # Unknown subcommand: show all subcommands anyway
             COMPREPLY=($(compgen -W "$commands" -- "$cur"))
             ;;
     esac
@@ -76,46 +79,47 @@ _kbdx_ops() {
     case $state in
         cmds)
             _describe 'command' '(
-                "merge:Merge entries from src into dest"
+                "merge:Merge entries from src into dest, skipping duplicates"
                 "diff:Show differences between two databases"
-                "dedup:Find and remove duplicates within a database"
+                "dedup:Find and remove duplicate entries within a database"
                 "completions:Generate shell completion scripts"
             )'
             ;;
         args)
-            case $words[1] in
+            local subcmd="${words[2]}"
+            case "$subcmd" in
                 merge)
                     _arguments \\
                         '--apply[Actually save changes]' \\
-                        '--similar[Detect similar entries]' \\
+                        '--similar[Detect near-duplicate entries]' \\
                         '--similarity-threshold=[Similarity threshold (0-1)]' \\
-                        '--interactive[Review one by one]' \\
-                        '-i[Review one by one]' \\
-                        '--no-pager[Print without pager]' \\
-                        '--auto-skip-similar[Skip all similars]' \\
-                        '--min-score=[Min score filter]' \\
-                        '--max-score=[Max score filter]' \\
-                        '--dest-password=[Dest DB password]' \\
-                        '--src-password=[Source DB password]' \\
-                        '--dest-keyfile=[Dest key file]:file:_files' \\
+                        '--interactive[Review each similar entry one by one]' \\
+                        '-i[Review each similar entry one by one]' \\
+                        '--no-pager[Print report to stdout]' \\
+                        '--auto-skip-similar[Skip all similar entries automatically]' \\
+                        '--min-score=[Minimum score filter]' \\
+                        '--max-score=[Maximum score filter]' \\
+                        '--dest-password=[Destination database password]' \\
+                        '--src-password=[Source database password]' \\
+                        '--dest-keyfile=[Destination key file]:file:_files' \\
                         '--src-keyfile=[Source key file]:file:_files' \\
                         '*:kdbx file:_files -g "*.kdbx"'
                     ;;
                 diff)
                     _arguments \\
-                        '-o[Output file]:file:_files' \\
-                        '--output=[Output file]:file:_files' \\
-                        '--apply[Actually create output]' \\
-                        '--similarity-threshold=[Threshold (0-1)]' \\
-                        '--no-pager[Print without pager]' \\
-                        '--min-score=[Min score filter]' \\
-                        '--max-score=[Max score filter]' \\
-                        '--password-a=[Password for A]' \\
-                        '--password-b=[Password for B]' \\
-                        '--output-password=[Output password]' \\
-                        '--keyfile-a=[Keyfile for A]:file:_files' \\
-                        '--keyfile-b=[Keyfile for B]:file:_files' \\
-                        '--output-keyfile=[Output keyfile]:file:_files' \\
+                        '-o[Output kdbx file]:output:_files' \\
+                        '--output=[Output kdbx file]:output:_files' \\
+                        '--apply[Actually create the output file]' \\
+                        '--similarity-threshold=[Threshold for pairing entries (0-1)]' \\
+                        '--no-pager[Print report to stdout]' \\
+                        '--min-score=[Minimum score filter]' \\
+                        '--max-score=[Maximum score filter]' \\
+                        '--password-a=[Password for first database]' \\
+                        '--password-b=[Password for second database]' \\
+                        '--output-password=[Password for output database]' \\
+                        '--keyfile-a=[Key file for first database]:file:_files' \\
+                        '--keyfile-b=[Key file for second database]:file:_files' \\
+                        '--output-keyfile=[Key file for output database]:file:_files' \\
                         '*:kdbx file:_files -g "*.kdbx"'
                     ;;
                 dedup)
@@ -123,17 +127,26 @@ _kbdx_ops() {
                         '--apply[Actually remove duplicates]' \\
                         '--interactive[Review groups one by one]' \\
                         '-i[Review groups one by one]' \\
-                        '--similarity-threshold=[Threshold (0-1)]' \\
-                        '--min-score=[Min score filter]' \\
-                        '--max-score=[Max score filter]' \\
-                        '--no-pager[Print without pager]' \\
-                        '--keep=[Keep strategy]:(first most-complete)' \\
+                        '--similarity-threshold=[Threshold to consider duplicate (0-1)]' \\
+                        '--min-score=[Minimum score filter]' \\
+                        '--max-score=[Maximum score filter]' \\
+                        '--no-pager[Print report to stdout]' \\
+                        '--keep=[Which entry to keep when removing duplicates]:(first most-complete)' \\
                         '--password=[Database password]' \\
                         '--keyfile=[Key file]:file:_files' \\
                         '*:kdbx file:_files -g "*.kdbx"'
                     ;;
                 completions)
                     _arguments '1:shell:(bash zsh)'
+                    ;;
+                *)
+                    # Subcommand ainda nao digitado: completar com nomes dos comandos
+                    _describe 'command' '(
+                        "merge:Merge entries from src into dest"
+                        "diff:Show differences between two databases"
+                        "dedup:Find and remove duplicates within a database"
+                        "completions:Generate shell completion scripts"
+                    )'
                     ;;
             esac
             ;;
