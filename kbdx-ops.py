@@ -12,6 +12,118 @@ SPDX-License-Identifier: Apache-2.0
 
 __version__ = "1.0"
 
+# ── Shell completion scripts ──────────────────────────────────────────
+_BASH_COMPLETION = '''\
+# kbdx-ops bash completion
+# Source: kbdx-ops completions bash
+# Install: kbdx-ops completions bash > /etc/bash_completion.d/kbdx-ops
+#          kbdx-ops completions bash > ~/.local/share/bash-completion/completions/kbdx-ops
+
+_kbdx_ops_completions() {
+    local cur prev words cword
+    _init_completion || return
+
+    # Subcommands
+    local commands="merge diff completions"
+    local merge_opts="--apply --similar --similarity-threshold --interactive -i --no-pager --auto-skip-similar --min-score --max-score --dest-password --src-password --dest-keyfile --src-keyfile"
+    local diff_opts="-o --output --apply --similarity-threshold --no-pager --min-score --max-score --password-a --password-b --output-password --keyfile-a --keyfile-b --output-keyfile"
+    local completions_opts="bash zsh"
+
+    if [[ $cword -eq 1 ]]; then
+        COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+        return
+    fi
+
+    case "${words[1]}" in
+        merge)
+            if [[ $cword -eq 2 ]]; then
+                COMPREPLY=($(compgen -f -X "!*.kdbx" -- "$cur"))
+            elif [[ $cword -eq 3 ]]; then
+                COMPREPLY=($(compgen -f -X "!*.kdbx" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "$merge_opts" -- "$cur"))
+            fi
+            ;;
+        diff)
+            if [[ $cword -eq 2 || $cword -eq 3 ]]; then
+                COMPREPLY=($(compgen -f -X "!*.kdbx" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "$diff_opts" -- "$cur"))
+            fi
+            ;;
+        completions)
+            COMPREPLY=($(compgen -W "$completions_opts" -- "$cur"))
+            ;;
+    esac
+} &&
+complete -F _kbdx_ops_completions kbdx-ops
+'''
+
+_ZSH_COMPLETION = '''\
+#compdef kbdx-ops
+# Source: kbdx-ops completions zsh
+# Install: kbdx-ops completions zsh > /usr/share/zsh/site-functions/_kbdx-ops
+#          kbdx-ops completions zsh > ~/.local/share/zsh/site-functions/_kbdx-ops
+
+_kbdx_ops() {
+    local context state state_descr line
+    typeset -A opt_args
+
+    _arguments -C \
+        "--version[Show version]" \
+        "--help[Show help]" \
+        "1:command:(merge diff completions)" \
+        "*::arg: ->args"
+
+    case $state in
+        args)
+            case $line[1] in
+                merge)
+                    _arguments \
+                        "--apply[Actually save changes]" \
+                        "--similar[Detect similar entries]" \
+                        "--similarity-threshold=[Similarity threshold]:threshold:()" \
+                        "--interactive[Review one by one]" \
+                        "-i[Review one by one]" \
+                        "--no-pager[Print without pager]" \
+                        "--auto-skip-similar[Skip all similars]" \
+                        "--min-score=[Min score filter]:score:()" \
+                        "--max-score=[Max score filter]:score:()" \
+                        "--dest-password=[Dest DB password]:password:()" \
+                        "--src-password=[Source DB password]:password:()" \
+                        "--dest-keyfile=[Dest key file]:keyfile:_files" \
+                        "--src-keyfile=[Source key file]:keyfile:_files" \
+                        "1:dest db:_files -g '*.kdbx'" \
+                        "2:src db:_files -g '*.kdbx'"
+                    ;;
+                diff)
+                    _arguments \
+                        "-o[Output file]:output:_files" \
+                        "--output=[Output file]:output:_files" \
+                        "--apply[Actually create output]" \
+                        "--similarity-threshold=[Similarity threshold]:threshold:()" \
+                        "--no-pager[Print without pager]" \
+                        "--min-score=[Min score filter]:score:()" \
+                        "--max-score=[Max score filter]:score:()" \
+                        "--password-a=[Password for file A]:password:()" \
+                        "--password-b=[Password for file B]:password:()" \
+                        "--output-password=[Output password]:password:()" \
+                        "--keyfile-a=[Keyfile for A]:keyfile:_files" \
+                        "--keyfile-b=[Keyfile for B]:keyfile:_files" \
+                        "--output-keyfile=[Output keyfile]:keyfile:_files" \
+                        "1:file a:_files -g '*.kdbx'" \
+                        "2:file b:_files -g '*.kdbx'"
+                    ;;
+                completions)
+                    _arguments "1:shell:(bash zsh)"
+                    ;;
+            esac
+            ;;
+    esac
+} &&
+compdef _kbdx_ops kbdx-ops
+'''
+
 import argparse
 import sys
 import os
@@ -475,6 +587,19 @@ Examples:
     d.add_argument("--max-score", type=float, default=1.0, metavar="0-1",
                    help="Filtro: só mostra divergências com score <= N")
 
+    # ── completions ────────────────────────────────────────────────────
+    c = sub.add_parser("completions", help="Generate shell completion scripts",
+                        formatter_class=argparse.RawDescriptionHelpFormatter,
+                        epilog="""
+Examples:
+  kbdx-ops completions bash    # print bash completions
+  kbdx-ops completions zsh     # print zsh completions
+  kbdx-ops completions bash > /etc/bash_completion.d/kbdx-ops
+  kbdx-ops completions zsh > /usr/share/zsh/site-functions/_kbdx-ops
+""")
+    c.add_argument("shell", choices=["bash", "zsh"],
+                    help="Shell to generate completions for")
+
     return p
 
 
@@ -851,6 +976,77 @@ def validate_common(args) -> None:
             sys.exit(1)
 
 
+def cmd_completions(args: argparse.Namespace) -> None:
+    """Detect binary location and install shell completions."""
+    import shutil
+
+    # Descobrir onde o binário está
+    bin_path = shutil.which("kbdx-ops")
+    if not bin_path:
+        # Talvez esteja rodando via python kbdx-ops.py
+        bin_path = os.path.abspath(sys.argv[0])
+
+    bin_dir = os.path.dirname(os.path.realpath(bin_path))
+
+    # Determinar diretórios de instalação
+    user_home = os.path.expanduser("~")
+    local_bin_dirs = [
+        os.path.join(user_home, ".local", "bin"),
+        os.path.join(user_home, ".cargo", "bin"),
+        os.path.join(user_home, "bin"),
+    ]
+
+    if any(bin_dir.startswith(d) for d in local_bin_dirs):
+        # Instalação local do usuário
+        if args.shell == "bash":
+            dest_dir = os.path.join(user_home, ".local", "share", "bash-completion", "completions")
+            dest_file = os.path.join(dest_dir, "kbdx-ops")
+        else:
+            dest_dir = os.path.join(user_home, ".local", "share", "zsh", "site-functions")
+            dest_file = os.path.join(dest_dir, "_kbdx-ops")
+        install_type = "local"
+    elif bin_dir.startswith("/usr") or bin_dir.startswith("/opt"):
+        # Instalação global do sistema
+        if args.shell == "bash":
+            dest_dir = "/etc/bash_completion.d"
+            dest_file = os.path.join(dest_dir, "kbdx-ops")
+        else:
+            dest_dir = "/usr/share/zsh/site-functions"
+            dest_file = os.path.join(dest_dir, "_kbdx-ops")
+        install_type = "global"
+    else:
+        # Fallback: local
+        if args.shell == "bash":
+            dest_dir = os.path.join(user_home, ".local", "share", "bash-completion", "completions")
+            dest_file = os.path.join(dest_dir, "kbdx-ops")
+        else:
+            dest_dir = os.path.join(user_home, ".local", "share", "zsh", "site-functions")
+            dest_file = os.path.join(dest_dir, "_kbdx-ops")
+        install_type = "local (fallback)"
+
+    # Criar diretório se não existir
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # Escrever o arquivo de completions
+    script = _BASH_COMPLETION if args.shell == "bash" else _ZSH_COMPLETION
+    with open(dest_file, "w") as f:
+        f.write(script)
+    os.chmod(dest_file, 0o644)
+
+    print(f"  ✅ Completions {args.shell} instalados: {dest_file}")
+    print(f"     Binário em: {bin_path}  ({install_type})")
+    print()
+
+    if args.shell == "bash":
+        print("  Para ativar na sessão atual:")
+        print(f"    source {dest_file}")
+        print("  Ou reinicie o terminal.")
+    else:
+        print("  Para ativar, adicione ao ~/.zshrc:")
+        print('    autoload -Uz compinit && compinit')
+        print(f"  Ou reinicie o terminal.")
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -893,6 +1089,9 @@ def main():
                 print("  Operação cancelada.")
                 sys.exit(0)
         cmd_diff(args)
+
+    elif args.command == "completions":
+        cmd_completions(args)
 
 
 if __name__ == "__main__":
