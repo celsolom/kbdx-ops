@@ -34,9 +34,13 @@ _kbdx_ops_completions() {
 
     case "$subcmd" in
         merge|diff)
-            # merge/diff: positions 2,3 (0-indexed: cword=2,3) are .kdbx files + flags
+            # merge/diff: 2 .kdbx files + flags; para de oferecer arquivo após 2
             COMPREPLY=()
-            if [[ $cword -eq 2 || $cword -eq 3 ]]; then
+            local kdbx_count=0
+            for w in "${COMP_WORDS[@]}"; do
+                [[ "$w" == *.kdbx ]] && ((kdbx_count++))
+            done
+            if [[ $kdbx_count -lt 2 ]]; then
                 COMPREPLY+=($(compgen -f -X '!*.kdbx' -- "$cur"))
             fi
             local opts="$merge_opts"
@@ -44,9 +48,13 @@ _kbdx_ops_completions() {
             COMPREPLY+=($(compgen -W "$opts" -- "$cur"))
             ;;
         dedup)
-            # dedup: position 2 (cword=2) is .kdbx file + flags
+            # dedup: 1 .kdbx file + flags; para de oferecer arquivo após 1
             COMPREPLY=()
-            if [[ $cword -eq 2 ]]; then
+            local has_kdbx=""
+            for w in "${COMP_WORDS[@]}"; do
+                [[ "$w" == *.kdbx ]] && has_kdbx=1
+            done
+            if [[ -z "$has_kdbx" ]]; then
                 COMPREPLY+=($(compgen -f -X '!*.kdbx' -- "$cur"))
             fi
             COMPREPLY+=($(compgen -W "$dedup_opts" -- "$cur"))
@@ -103,7 +111,8 @@ _kbdx_ops() {
                         '--src-password=[Source database password]' \\
                         '--dest-keyfile=[Destination key file]:file:_files' \\
                         '--src-keyfile=[Source key file]:file:_files' \\
-                        '*:kdbx file:_files -g "*.kdbx"'
+                        '1:dest kdbx:_files -g "*.kdbx"' \\
+                        '2:src kdbx:_files -g "*.kdbx"'
                     ;;
                 diff)
                     _arguments \\
@@ -120,7 +129,8 @@ _kbdx_ops() {
                         '--keyfile-a=[Key file for first database]:file:_files' \\
                         '--keyfile-b=[Key file for second database]:file:_files' \\
                         '--output-keyfile=[Key file for output database]:file:_files' \\
-                        '*:kdbx file:_files -g "*.kdbx"'
+                        '1:file a:_files -g "*.kdbx"' \\
+                        '2:file b:_files -g "*.kdbx"'
                     ;;
                 dedup)
                     _arguments \\
@@ -134,7 +144,7 @@ _kbdx_ops() {
                         '--keep=[Which entry to keep when removing duplicates]:(first most-complete)' \\
                         '--password=[Database password]' \\
                         '--keyfile=[Key file]:file:_files' \\
-                        '*:kdbx file:_files -g "*.kdbx"'
+                        '1:database:_files -g "*.kdbx"'
                     ;;
                 completions)
                     _arguments '1:shell:(bash zsh)'
