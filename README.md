@@ -2,6 +2,11 @@
 
 **kbdx-ops** is a command-line tool to **merge** and **diff** KeePass (.kdbx) databases. It detects exact duplicates, finds similar entries using fuzzy field matching, and can produce standalone diff files.
 
+```
+$ kbdx-ops --version
+kbdx-ops 1.0
+```
+
 ## Features
 
 - **Merge** — Copy new entries from a source database into a destination, skipping exact duplicates
@@ -10,6 +15,7 @@
 - **Diff output** — Create a new .kdbx containing only the divergent entries
 - **Filters** — `--min-score` / `--max-score` to focus on specific similarity ranges
 - **Interactive review** — Single-key input (`a`/`s`/`b`/`q`) with per-entry detail and optional pager
+- **Shell completions** — Tab completion for bash and zsh
 - **Safe by default** — Preview mode unless `--apply` is given
 
 ## Quick start
@@ -31,17 +37,11 @@ kbdx-ops diff pessoal.kdbx backup.kdbx
 kbdx-ops diff pessoal.kdbx backup.kdbx -o diff.kdbx --apply
 ```
 
-## Requirements
-
-- **Python 3.10+** (for development / running from source)
-- **pykeepass** (installed automatically via `build.sh`)
-- No dependencies for the pre-built binary
-
 ## Install
 
 ### Pre-built binary
 
-Download `kbdx-ops` from the [releases page](https://github.com/your/repo/releases) and place it in your PATH:
+Download `kbdx-ops` from the [releases page](https://github.com/celsolom/kbdx-ops/releases) and place it in your PATH:
 
 ```bash
 chmod +x kbdx-ops
@@ -51,18 +51,48 @@ mv kbdx-ops ~/.local/bin/
 ### From source
 
 ```bash
-git clone <url>
+git clone https://github.com/celsolom/kbdx-ops.git
 cd kbdx-ops
 ./build.sh
 ```
 
 The binary will be in `dist/kbdx-ops`.
 
+## Shell completions
+
+```bash
+# Bash
+kbdx-ops completions bash
+
+# Zsh
+kbdx-ops completions zsh
+```
+
+O comando detecta automaticamente onde o binário está instalado:
+
+| Localização do binário | Destino bash | Destino zsh |
+|---|---|---|
+| `~/.local/bin/` | `~/.local/share/bash-completion/completions/kbdx-ops` | `~/.local/share/zsh/site-functions/_kbdx-ops` |
+| `/usr/bin/`, `/usr/local/bin/` | `/etc/bash_completion.d/kbdx-ops` | `/usr/share/zsh/site-functions/_kbdx-ops` |
+
+Após instalar, reinicie o terminal ou recarregue:
+
+```bash
+# Bash
+source ~/.bashrc
+
+# Zsh
+autoload -Uz compinit && compinit
+```
+
 ## Usage
 
 ```
 kbdx-ops merge <dest_db> <src_db> [options]
 kbdx-ops diff <file_a> <file_b> [options]
+kbdx-ops completions <bash|zsh>
+kbdx-ops --version
+kbdx-ops --help
 ```
 
 ### Merge command
