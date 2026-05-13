@@ -10,6 +10,8 @@ Licensed under the Apache License, Version 2.0.
 SPDX-License-Identifier: Apache-2.0
 """
 
+__version__ = "1.0"
+
 import argparse
 import sys
 import os
@@ -404,6 +406,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="KeePass operations: merge and diff .kdbx files.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument(
+        "--version", action="version", version=f"kbdx-ops {__version__}",
+        help="Show version and exit",
     )
     sub = p.add_subparsers(dest="command", required=True, title="Commands")
 
