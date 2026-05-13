@@ -24,10 +24,11 @@ _kbdx_ops_completions() {
     _init_completion || return
 
     # Subcommands
-    local commands="merge diff completions"
+    local commands="merge diff completions dedup"
     local merge_opts="--apply --similar --similarity-threshold --interactive -i --no-pager --auto-skip-similar --min-score --max-score --dest-password --src-password --dest-keyfile --src-keyfile"
     local diff_opts="-o --output --apply --similarity-threshold --no-pager --min-score --max-score --password-a --password-b --output-password --keyfile-a --keyfile-b --output-keyfile"
     local completions_opts="bash zsh"
+    local dedup_opts="--apply --interactive -i --similarity-threshold --min-score --max-score --no-pager --keep --password --keyfile"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -54,6 +55,13 @@ _kbdx_ops_completions() {
         completions)
             COMPREPLY=($(compgen -W "$completions_opts" -- "$cur"))
             ;;
+        dedup)
+            if [[ $cword -eq 2 ]]; then
+                COMPREPLY=($(compgen -f -X "!*.kdbx" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "$dedup_opts" -- "$cur"))
+            fi
+            ;;
     esac
 } &&
 complete -F _kbdx_ops_completions kbdx-ops
@@ -72,7 +80,7 @@ _kbdx_ops() {
     _arguments -C \
         "--version[Show version]" \
         "--help[Show help]" \
-        "1:command:(merge diff completions)" \
+        "1:command:(merge diff completions dedup)" \
         "*::arg: ->args"
 
     case $state in
@@ -116,6 +124,20 @@ _kbdx_ops() {
                     ;;
                 completions)
                     _arguments "1:shell:(bash zsh)"
+                    ;;
+                dedup)
+                    _arguments \
+                        "--apply[Actually remove duplicates]" \
+                        "--interactive[Review groups one by one]" \
+                        "-i[Review groups one by one]" \
+                        "--similarity-threshold=[Threshold]:threshold:()" \
+                        "--min-score=[Min score]:score:()" \
+                        "--max-score=[Max score]:score:()" \
+                        "--no-pager[Print without pager]" \
+                        "--keep=[Keep strategy]:(first most-complete)" \
+                        "--password=[Password]:password:()" \
+                        "--keyfile=[Key file]:keyfile:_files" \
+                        "1:database:_files -g '*.kdbx'"
                     ;;
             esac
             ;;
@@ -600,6 +622,34 @@ Examples:
     c.add_argument("shell", choices=["bash", "zsh"],
                     help="Shell to generate completions for")
 
+    # ── dedup ──────────────────────────────────────────────────────────
+    dp = sub.add_parser("dedup", help="Find and remove duplicate entries within a database",
+                         formatter_class=argparse.RawDescriptionHelpFormatter,
+                         epilog="""
+Examples:
+  kbdx-ops dedup pessoal.kdbx                              # preview
+  kbdx-ops dedup pessoal.kdbx --apply                      # remove duplicatas
+  kbdx-ops dedup pessoal.kdbx --interactive                # decide uma a uma
+  kbdx-ops dedup pessoal.kdbx --similarity-threshold 0.8   # só duplicatas exatas
+""")
+    dp.add_argument("database", type=Path, help="KeePass database")
+    dp.add_argument("--password", help="Database password")
+    dp.add_argument("--keyfile", type=Path, default=None)
+    dp.add_argument("--apply", action="store_true",
+                    help="REALMENTE remove duplicatas (padrão é preview)")
+    dp.add_argument("--interactive", "-i", action="store_true",
+                    help="Revisar cada grupo de duplicatas")
+    dp.add_argument("--similarity-threshold", type=float, default=0.8, metavar="0-1",
+                    help="Similaridade para considerar duplicata (padrão: 0.8)")
+    dp.add_argument("--min-score", type=float, default=0.0, metavar="0-1",
+                    help="Filtro: só mostra grupos com score >= N")
+    dp.add_argument("--max-score", type=float, default=1.0, metavar="0-1",
+                    help="Filtro: só mostra grupos com score <= N")
+    dp.add_argument("--no-pager", action="store_true",
+                    help="Imprime relatório sem pager")
+    dp.add_argument("--keep", choices=["first", "most-complete"], default="most-complete",
+                    help="Critério para manter qual entrada (padrão: most-complete)")
+
     return p
 
 
@@ -953,8 +1003,323 @@ def cmd_diff(args: argparse.Namespace) -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  MAIN
+#  COMANDO: DEDUP
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def _entry_completeness(sig: dict) -> int:
+    """Score how complete an entry is (more filled fields = higher)."""
+    score = 0
+    for field in ("title", "username", "password", "url", "notes"):
+        if sig[field]:
+            score += 1
+    if sig["custom"]:
+        score += len(sig["custom"])
+    return score
+
+
+def _group_duplicates(entries, sigs, threshold: float) -> list:
+    """Group entries into duplicate groups based on similarity.
+    Returns list of groups, each group is a list of (entry, sig, idx)."""
+    n = len(entries)
+    visited = [False] * n
+    groups = []
+
+    for i in range(n):
+        if visited[i]:
+            continue
+        group = [(entries[i], sigs[i], i)]
+        visited[i] = True
+
+        for j in range(i + 1, n):
+            if visited[j]:
+                continue
+            field_scores = compute_field_scores(sigs[i], sigs[j])
+            score = compute_overall_similarity(field_scores)
+            if score >= threshold:
+                group.append((entries[j], sigs[j], j))
+                visited[j] = True
+
+        if len(group) > 1:
+            groups.append(group)
+
+    return groups
+
+
+def cmd_dedup(args: argparse.Namespace) -> None:
+    """Find and remove duplicate entries within a database."""
+    dry_run = not args.apply
+    if dry_run:
+        print("\n  ⚠  MODO PREVIEW — nada será removido. Use --apply para remover.\n")
+
+    kp = open_db(args.database, "Database", args.password, args.keyfile)
+
+    entries = kp.entries
+    sigs = [entry_signature(e) for e in entries]
+
+    print(f"  Total de entradas: {len(entries)}")
+
+    # Agrupar duplicatas
+    groups = _group_duplicates(entries, sigs, args.similarity_threshold)
+
+    # Aplicar filtro de score (usar o score do par mais similar no grupo)
+    filtered_groups = []
+    for group in groups:
+        # Score do grupo = maior similaridade entre qualquer par
+        max_score = 0.0
+        for a in range(len(group)):
+            for b in range(a + 1, len(group)):
+                fs = compute_field_scores(group[a][1], group[b][1])
+                s = compute_overall_similarity(fs)
+                if s > max_score:
+                    max_score = s
+        if args.min_score <= max_score <= args.max_score:
+            filtered_groups.append((max_score, group))
+
+    filtered_groups.sort(key=lambda x: -x[0])  # do mais similar ao menos
+
+    if not filtered_groups:
+        print("\n  ✅ Nenhum grupo de duplicatas encontrado.")
+        return
+
+    total_duplicates = sum(len(g) for _, g in filtered_groups)
+    total_to_remove = total_duplicates - len(filtered_groups)  # keep 1 per group
+
+    print(f"\n  📊  {len(filtered_groups)} grupo(s) de duplicatas encontrados")
+    print(f"      {total_duplicates} entrada(s) envolvidas")
+    print(f"      {total_to_remove} seriam removida(s) (mantendo 1 por grupo)")
+    print()
+
+    removed_count = 0
+
+    if args.interactive:
+        for group_idx, (group_score, group) in enumerate(filtered_groups, 1):
+            print("═" * 70)
+            print(f"  GRUPO #{group_idx}  |  Score: {group_score:.0%}  |  {len(group)} entradas")
+            print("═" * 70)
+
+            for idx, (entry, sig, _) in enumerate(group):
+                t = sig["title"] or "(no title)"
+                u = sig["username"]
+                extra = f" [{u}]" if u else ""
+                g = get_entry_group_path(entry)
+                comp = _entry_completeness(sig)
+                print(f"  [{idx}] {t}{extra}")
+                print(f"       Grupo: /{g}   Completude: {comp}")
+                print(f"       URL: {sig['url'] or '-'}")
+                if sig["notes"]:
+                    notes = sig["notes"]
+                    if len(notes) > 60:
+                        notes = notes[:57] + "..."
+                    print(f"       Notes: {notes}")
+                print()
+
+            # Mostrar scores entre pares
+            for a in range(len(group)):
+                for b in range(a + 1, len(group)):
+                    fs = compute_field_scores(group[a][1], group[b][1])
+                    s = compute_overall_similarity(fs)
+                    t_a = group[a][1]["title"] or "(no title)"
+                    t_b = group[b][1]["title"] or "(no title)"
+                    print(f"       {t_a}  ↔  {t_b}  →  {s:.0%}")
+
+            print()
+
+            if args.keep == "most-complete":
+                # Escolher a mais completa
+                best_idx = max(range(len(group)),
+                               key=lambda i: _entry_completeness(group[i][1]))
+            else:
+                best_idx = 0  # first
+
+            best_entry = group[best_idx][1]
+            best_title = best_entry["title"] or "(no title)"
+            best_user = best_entry["username"]
+            best_extra = f" [{best_user}]" if best_user else ""
+
+            print(f"  Mantida: [{best_idx}] {best_title}{best_extra}")
+            print()
+
+            key = prompt_key({
+                "k": "manter esta", "o": "escolher outra",
+                "s": "pular grupo", "q": "sair",
+            })
+
+            if key == "k":
+                to_remove = [i for i in range(len(group)) if i != best_idx]
+                if not dry_run:
+                    for ri in to_remove:
+                        entry, sig, _ = group[ri]
+                        t = sig["title"] or "(no title)"
+                        u = sig["username"]
+                        extra = f" [{u}]" if u else ""
+                        try:
+                            entry.delete()
+                            print(f"  🗑  REMOVIDO:  {t}{extra}")
+                            removed_count += 1
+                        except Exception as e:
+                            print(f"  ❌ FALHA ao remover '{t}': {e}", file=sys.stderr)
+                else:
+                    for ri in to_remove:
+                        entry, sig, _ = group[ri]
+                        t = sig["title"] or "(no title)"
+                        u = sig["username"]
+                        extra = f" [{u}]" if u else ""
+                        print(f"  🗑  REMOVERIA:  {t}{extra}")
+                        removed_count += 1
+
+            elif key == "o":
+                print("  Escolha qual manter [0-{}]:".format(len(group) - 1), end=" ", flush=True)
+                try:
+                    ch = input().strip()
+                    chosen = int(ch)
+                    if 0 <= chosen < len(group):
+                        to_remove = [i for i in range(len(group)) if i != chosen]
+                        if not dry_run:
+                            for ri in to_remove:
+                                entry, sig, _ = group[ri]
+                                t = sig["title"] or "(no title)"
+                                u = sig["username"]
+                                extra = f" [{u}]" if u else ""
+                                entry.delete()
+                                print(f"  🗑  REMOVIDO:  {t}{extra}")
+                                removed_count += 1
+                        else:
+                            for ri in to_remove:
+                                entry, sig, _ = group[ri]
+                                t = sig["title"] or "(no title)"
+                                u = sig["username"]
+                                extra = f" [{u}]" if u else ""
+                                print(f"  🗑  REMOVERIA:  {t}{extra}")
+                                removed_count += 1
+                    else:
+                        print("  Índice inválido, pulando grupo.")
+                except (ValueError, IndexError):
+                    print("  Entrada inválida, pulando grupo.")
+
+            elif key == "q":
+                print("  Operação abortada.")
+                break
+            # else "s": skip
+
+    else:
+        # Modo não-interativo: mostrar relatório e perguntar ação em lote
+        report_lines = []
+        for group_idx, (group_score, group) in enumerate(filtered_groups, 1):
+            report_lines.append(f"Grupo #{group_idx} (score: {group_score:.0%}, {len(group)} entradas):")
+            for entry, sig, _ in group:
+                t = sig["title"] or "(no title)"
+                u = sig["username"]
+                extra = f" [{u}]" if u else ""
+                g = get_entry_group_path(entry)
+                comp = _entry_completeness(sig)
+                report_lines.append(f"  - {t}{extra}  /{g}  (completude: {comp})")
+            report_lines.append("")
+
+        report = "\n".join(report_lines)
+        print("📋  GRUPOS DE DUPLICATAS:")
+        display_via_pager(report, args.no_pager)
+
+        print()
+        print(f"  {len(filtered_groups)} grupo(s), {total_to_remove} entrada(s) a remover.")
+        print()
+        act = prompt_key({
+            "r": "remover duplicatas",
+            "i": "revisar grupos",
+            "q": "sair",
+        })
+
+        if act == "r":
+            for _, group in filtered_groups:
+                if args.keep == "most-complete":
+                    best_idx = max(range(len(group)),
+                                   key=lambda i: _entry_completeness(group[i][1]))
+                else:
+                    best_idx = 0
+                to_remove = [i for i in range(len(group)) if i != best_idx]
+                for ri in to_remove:
+                    entry, sig, _ = group[ri]
+                    t = sig["title"] or "(no title)"
+                    u = sig["username"]
+                    extra = f" [{u}]" if u else ""
+                    if not dry_run:
+                        entry.delete()
+                        print(f"  🗑  REMOVIDO:  {t}{extra}")
+                    else:
+                        print(f"  🗑  REMOVERIA:  {t}{extra}")
+                    removed_count += 1
+        elif act == "i":
+            # Re-executa em modo interativo (simplificado)
+            for group_idx, (group_score, group) in enumerate(filtered_groups, 1):
+                print()
+                print(f"  GRUPO #{group_idx} (score: {group_score:.0%})")
+                for idx, (entry, sig, _) in enumerate(group):
+                    t = sig["title"] or "(no title)"
+                    u = sig["username"]
+                    extra = f" [{u}]" if u else ""
+                    print(f"  [{idx}] {t}{extra}")
+
+                if args.keep == "most-complete":
+                    best_idx = max(range(len(group)),
+                                   key=lambda i: _entry_completeness(group[i][1]))
+                else:
+                    best_idx = 0
+
+                print(f"  Manter: [{best_idx}]")
+                key = prompt_key({"k": "manter", "o": "escolher", "s": "pular", "q": "sair"})
+
+                if key == "k":
+                    to_remove = [i for i in range(len(group)) if i != best_idx]
+                    for ri in to_remove:
+                        entry, sig, _ = group[ri]
+                        t = sig["title"] or "(no title)"
+                        u = sig["username"]
+                        extra = f" [{u}]" if u else ""
+                        if not dry_run:
+                            entry.delete()
+                            print(f"  🗑  REMOVIDO:  {t}{extra}")
+                        else:
+                            print(f"  🗑  REMOVERIA:  {t}{extra}")
+                        removed_count += 1
+                elif key == "o":
+                    print("  Escolha: ", end="", flush=True)
+                    try:
+                        chosen = int(input().strip())
+                        if 0 <= chosen < len(group):
+                            to_remove = [i for i in range(len(group)) if i != chosen]
+                            for ri in to_remove:
+                                entry, sig, _ = group[ri]
+                                t = sig["title"] or "(no title)"
+                                u = sig["username"]
+                                extra = f" [{u}]" if u else ""
+                                if not dry_run:
+                                    entry.delete()
+                                    print(f"  🗑  REMOVIDO:  {t}{extra}")
+                                else:
+                                    print(f"  🗑  REMOVERIA:  {t}{extra}")
+                                removed_count += 1
+                    except ValueError:
+                        print("  Inválido.")
+                elif key == "q":
+                    break
+        # else "q": sai
+
+    # ── Sumário ───────────────────────────────────────────────────────────
+    print()
+    print("═" * 60)
+    print(f"  Database:     {args.database.name}")
+    print(f"  Grupos encontrados: {len(filtered_groups)}")
+    print(f"  Removidas:    {removed_count}")
+    print(f"  Modo:         {'PREVIEW (nada removido)' if dry_run else 'APLICANDO'}")
+    print("═" * 60)
+
+    if not dry_run and removed_count > 0:
+        kp.save()
+        print(f"  ✅ Banco salvo com sucesso ({removed_count} entrada(s) removidas).")
+    elif dry_run and removed_count > 0:
+        print(f"  ⚠  Preview. Use --apply para remover {removed_count} entrada(s).")
+    else:
+        print("  Nada a fazer.")
+
 
 def validate_common(args) -> None:
     """Validate shared argument constraints."""
@@ -1092,6 +1457,12 @@ def main():
 
     elif args.command == "completions":
         cmd_completions(args)
+
+    elif args.command == "dedup":
+        if not args.database.exists():
+            print(f"ERROR: Banco não encontrado: {args.database}", file=sys.stderr)
+            sys.exit(1)
+        cmd_dedup(args)
 
 
 if __name__ == "__main__":
