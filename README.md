@@ -35,6 +35,12 @@ kbdx-ops diff pessoal.kdbx backup.kdbx
 
 # Diff — create a new .kdbx with only the differing entries
 kbdx-ops diff pessoal.kdbx backup.kdbx -o diff.kdbx --apply
+
+# Dedup — preview duplicates
+kbdx-ops dedup pessoal.kdbx
+
+# Dedup — remove duplicates
+kbdx-ops dedup pessoal.kdbx --apply
 ```
 
 ## Install
@@ -90,6 +96,7 @@ autoload -Uz compinit && compinit
 ```
 kbdx-ops merge <dest_db> <src_db> [options]
 kbdx-ops diff <file_a> <file_b> [options]
+kbdx-ops dedup <database> [options]
 kbdx-ops completions <bash|zsh>
 kbdx-ops --version
 kbdx-ops --help
@@ -122,6 +129,19 @@ kbdx-ops --help
 | `--password-a` / `--password-b` | Passwords for input files |
 | `--output-password` | Password for output file |
 | `--keyfile-a` / `--keyfile-b` / `--output-keyfile` | Key files |
+
+### Dedup command
+
+| Option | Description |
+|---|---|
+| `--apply` | Actually remove duplicates (default is preview) |
+| `--interactive, -i` | Review each duplicate group one by one |
+| `--similarity-threshold 0.8` | Minimum score to consider duplicate |
+| `--min-score` / `--max-score` | Filter groups by score |
+| `--no-pager` | Print report without pager |
+| `--keep {most-complete,first}` | Which entry to keep (default: most-complete) |
+| `--password` | Database password (omit to prompt) |
+| `--keyfile` | Key file |
 
 ## How it works
 

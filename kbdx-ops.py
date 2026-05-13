@@ -95,6 +95,9 @@ _kbdx_ops() {
             ;;
         args)
             local subcmd="${words[2]}"
+            # Remove subcommand from words so inner _arguments doesn't see it as positional
+            words=( "${words[1]}" "${(@)words[3,-1]}" )
+            (( CURRENT > 1 )) && (( CURRENT-- ))
             case "$subcmd" in
                 merge)
                     _arguments \\
