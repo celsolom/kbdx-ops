@@ -74,7 +74,7 @@ _kbdx_ops() {
         '--version[Show version]' \\
         '--help[Show help]' \\
         '1: :->cmds' \\
-        '*: :->args' && return
+        '*: :->args'
 
     case $state in
         cmds)
